@@ -34,6 +34,35 @@ start()
   w_satp(0);
 
   // delegate all interrupts and exceptions to supervisor mode.
+  //
+  // note that medeleg and mideleg CSRs are WARL. for mideleg, following is the
+  // behavior:
+  //
+  // interrupt  can-delegate  reason-code
+  // =========  ============  ===========
+  // USI        N             U
+  // SSI        Y             S
+  // MSI        N             M
+  // UTI        N             U
+  // STI        Y             S
+  // MTI        N             M
+  // UEI        N             U
+  // SEI        Y             S
+  // MEI        N             M
+  //
+  // reason U: setting a bit here means that a U-mode interrupt will be
+  // delegated to the S-mode interrupt handler. a U-mode interrupt can only
+  // occur in U-mode, but qemu doesn't support U-mode interrupts, and thus this
+  // delegation is not meaningful.
+  //
+  // reason S: setting a bit here means that a S-mode interrupt will be
+  // delegated to the S-mode interrupt handler (instead of the default M-mode
+  // interrupt handler).
+  //
+  // reason M: setting a bit here means that a M-mode interrupt will be
+  // delegated to the S-mode interrupt handler, but a higher level interrupt can
+  // never be handled by a lower level interrupt handler, and thus this
+  // delegation is not meaningful.
   w_medeleg(0xffff);
   w_mideleg(0xffff);
   w_sie(r_sie() | SIE_SEIE | SIE_STIE | SIE_SSIE);
@@ -82,6 +111,17 @@ timerinit()
   w_mtvec((uint64)timervec);
 
   // enable machine-mode interrupts.
+  //
+  // note this setting only affects the M-mode. when running in S-mode or
+  // U-mode, M-mode interrupts are always enabled, regardless of the MIE
+  // setting. quote from spec:
+  //
+  // When a hart is executing in privilege mode x, interrupts are globally
+  // enabled when xIE=1 and globally disabled when xIE=0. Interrupts for
+  // lower-privilege modes, w<x, are always globally disabled regardless of the
+  // setting of the lower-privilege mode’s global wIE bit. Interrupts for
+  // higher-privilege modes, y>x, are always globally enabled regardless of the
+  // setting of the higherprivilege mode’s global yIE bit.
   w_mstatus(r_mstatus() | MSTATUS_MIE);
 
   // enable machine-mode timer interrupts.
