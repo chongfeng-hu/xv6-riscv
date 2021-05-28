@@ -58,6 +58,30 @@ OBJDUMP = $(TOOLPREFIX)objdump
 
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
 CFLAGS += -MD
+# RISC-V supports 2 code models as of now: medlow and medany.
+#
+# * medlow
+# when in this mode, references to global symbols are compiled into lui/ld
+# instructions. lui supplies the upper 20 bits, while ld supplies the lower 12
+# bits, they form a 32 bit address, and then it gets sign extended into a 64 bit
+# address on rv64. therefore, on rv64, the addressable range is:
+# [0x00000000_00000000, 0x00000000_7FFFFFFF] and
+# [0xFFFFFFFF_80000000, 0xFFFFFFFF_FFFFFFFF].
+#
+# * medany
+# when in this mode, references to global symbols are compiled into auipc/ld
+# instructions. auipc supplies the upper 20 bits, while ld supplies the lower 12
+# bits, they form a 32 bit offset, and then it gets sign extended and added to
+# pc to form a 64 bit address on rv64. therefore, on rv64, the addressable range
+# is [pc - 2G, pc + 2G].
+#
+# since kernel is linked at 0x80000000, we cannot use medlow, as addresses above
+# it is out of range. medany is the only option.
+#
+# both models still use auipc instructions for function calls, etc., so both
+# restrict the generated code to be linked within a 2GiB window, as auipc allows
+# a max jump of +2G at the lowest address, and a max jump of -2G at the highest
+# address.
 CFLAGS += -mcmodel=medany
 CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax
 CFLAGS += -I.
