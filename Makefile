@@ -56,7 +56,7 @@ LD = $(TOOLPREFIX)ld
 OBJCOPY = $(TOOLPREFIX)objcopy
 OBJDUMP = $(TOOLPREFIX)objdump
 
-CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
+CFLAGS = -Wall -Werror -Og -fno-omit-frame-pointer -ggdb -gdwarf-2
 CFLAGS += -MD
 # RISC-V supports 2 code models as of now: medlow and medany.
 #
