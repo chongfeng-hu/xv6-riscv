@@ -34,6 +34,17 @@ start()
 
   // delegate all interrupts and exceptions to supervisor mode.
   //
+  // definitions:
+  // * M-mode exception is a synchronous event that occurs when the hart happens
+  //   to be executing in M-mode. same goes for other modes;
+  // * M-mode interrupt doesn't necessarily mean that the hart is executing in
+  //   M-mode when the event happens, it's how the PLIC is programmed to trigger
+  //   an M-mode interrupt for a given event (the PLIC could alternatively be
+  //   configured to trigger an S-mode interrupt instead for the same event), or
+  //   for the built-in timer, it's always hard-wired to trigger M-mode
+  //   interrupt, and so the mode of an interrupt is independent of the mode the
+  //   hart is executing in when the event occurs.
+  //
   // note that medeleg and mideleg CSRs are WARL. for mideleg, following is the
   // behavior:
   //
@@ -50,9 +61,9 @@ start()
   // MEI        N             M
   //
   // reason U: setting a bit here means that a U-mode interrupt will be
-  // delegated to the S-mode interrupt handler. a U-mode interrupt can only
-  // occur in U-mode, but qemu doesn't support U-mode interrupts, and thus this
-  // delegation is not meaningful.
+  // delegated to the S-mode interrupt handler. U-mode interrupt support
+  // requires the N extension; qemu doesn't support U-mode interrupts, and thus
+  // this delegation is not meaningful.
   //
   // reason S: setting a bit here means that a S-mode interrupt will be
   // delegated to the S-mode interrupt handler (instead of the default M-mode
@@ -60,8 +71,12 @@ start()
   //
   // reason M: setting a bit here means that a M-mode interrupt will be
   // delegated to the S-mode interrupt handler, but a higher level interrupt can
-  // never be handled by a lower level interrupt handler, and thus this
-  // delegation is not meaningful.
+  // never be handled by a lower level interrupt handler (spec: Traps never
+  // transition from a more-privileged mode to a less-privileged mode. For
+  // example, if M-mode has delegated illegal instruction exceptions to S-mode,
+  // and M-mode software later executes an illegal instruction, the trap is
+  // taken in M-mode, rather than being delegated to S-mode), and thus this
+  // delegation is never meaningful, and is always hard-wired to 0.
   w_medeleg(0xffff);
   w_mideleg(0xffff);
   w_sie(r_sie() | SIE_SEIE | SIE_STIE | SIE_SSIE);
@@ -87,6 +102,11 @@ start()
 // at timervec in kernelvec.S,
 // which turns them into software interrupts for
 // devintr() in trap.c.
+//
+// note that timer interrupts are controlled by the mtime and mtimecmp
+// registers, and are hard-wired to always trigger M-mode interrupts, unlike
+// external interrupts which can be controlled by software through the PLIC to
+// either trigger M-mode or S-mode interrupts.
 void
 timerinit()
 {
