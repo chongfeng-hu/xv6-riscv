@@ -17,6 +17,45 @@ uint64 timer_scratch[NCPU][5];
 extern void timervec();
 
 // entry.S jumps here in machine mode on stack0.
+//
+// privilege modes: 0 - User, 1 - Supervisor, 3 - Machine
+//
+// When a hart is executing in privilege mode x, interrupts are globally enabled
+// when xIE=1 and globally disabled when xIE=0. Interrupts for lower-privilege
+// modes, w<x, are always globally disabled regardless of the setting of the
+// lower-privilege mode’s global wIE bit. Interrupts for higher-privilege modes,
+// y>x, are always globally enabled regardless of the setting of the higher-
+// privilege mode’s global yIE bit.
+//
+// By default, all traps at any privilege level are handled in machine mode.
+// Setting a bit in medeleg or mideleg will delegate the corresponding trap in
+// S-mode or U-mode to the S-mode trap handler. If U-mode traps are supported,
+// S-mode may in turn set corresponding bits in the sedeleg and sideleg
+// registers to delegate traps that occur in U-mode to the U-mode trap handler.
+//
+// Traps never transition from a more-privileged mode to a less-privileged mode.
+// For example, if M-mode has delegated illegal instruction exceptions to
+// S-mode, and M-mode software later executes an illegal instruction, the trap
+// is taken in M-mode, rather than being delegated to S-mode.
+//
+// When a trap is taken from privilege mode y into privilege mode x (y <= x):
+// * pc of the exceptional instruction is preserved in xepc, and pc is set to
+//   xtvec. (for synchronous exceptions, xepc points to the instruction that
+//   caused the exception; for interupts, it points where execution should
+//   resume after the interrupt is handled)
+// * xcause is set to the exception cause, and xtval is set to
+//   exception-specific information.
+// * interrupts are disabled by setting xstatus.xIE = 0, and the previous value
+//   of xIE is preserved in xstatus.xPIE.
+// * the pre-trap privilege mode is preserved in xstatus.xPP, and the privilege
+//   mode is changed to x.
+//
+// When the trap handler returns, it uses the xret instruction, which does the
+// following:
+// * pc is set to xepc.
+// * previous interrupt-enable setting is restored by copying xstatus.xPIE to
+//   xIE.
+// * privilege mode is set to the value in xstatus.xPP.
 void
 start()
 {
@@ -71,11 +110,7 @@ start()
   //
   // reason M: setting a bit here means that a M-mode interrupt will be
   // delegated to the S-mode interrupt handler, but a higher level interrupt can
-  // never be handled by a lower level interrupt handler (spec: Traps never
-  // transition from a more-privileged mode to a less-privileged mode. For
-  // example, if M-mode has delegated illegal instruction exceptions to S-mode,
-  // and M-mode software later executes an illegal instruction, the trap is
-  // taken in M-mode, rather than being delegated to S-mode), and thus this
+  // never be handled by a lower level interrupt handler, and thus this
   // delegation is never meaningful, and is always hard-wired to 0.
   w_medeleg(0xffff);
   w_mideleg(0xffff);
@@ -133,14 +168,7 @@ timerinit()
   //
   // note this setting only affects the M-mode. when running in S-mode or
   // U-mode, M-mode interrupts are always enabled, regardless of the MIE
-  // setting. quote from spec:
-  //
-  // When a hart is executing in privilege mode x, interrupts are globally
-  // enabled when xIE=1 and globally disabled when xIE=0. Interrupts for
-  // lower-privilege modes, w<x, are always globally disabled regardless of the
-  // setting of the lower-privilege mode’s global wIE bit. Interrupts for
-  // higher-privilege modes, y>x, are always globally enabled regardless of the
-  // setting of the higherprivilege mode’s global yIE bit.
+  // setting.
   w_mstatus(r_mstatus() | MSTATUS_MIE);
 
   // enable machine-mode timer interrupts.
