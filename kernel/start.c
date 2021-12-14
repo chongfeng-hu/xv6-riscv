@@ -118,6 +118,24 @@ start()
 
   // configure Physical Memory Protection to give supervisor mode
   // access to all of physical memory.
+  //
+  // use NAPOT range. pmpaddr is set to 0111...1111 (total 54 bits), the 2nd
+  // last entry in Table 3.10 in privileged spec. it corresponds to a range of
+  // size 2^56, which covers the entire physical address available, with a base
+  // address of 0x0.
+  //
+  // if larger physical addresses are made available in the future, the top 10
+  // bits in the pmpaddr, which currently are hard-wired to 0, can be opened up
+  // to cover the entire 2^64 address space.
+  //
+  // the last entry (1111...1111) would cover a range of size 2^57, which is 2X
+  // the entire address space, and is therefore impossible. it can't be
+  // redefined to instead cover 2^56, because if so, then 0111...1111 would have
+  // to cover 2^55, which is half the address space, so one bit is needed to
+  // select the lower/higher half of the memory, but there's no free bit
+  // available. instead, as defined in spec, y011...1111 covers a range of 2^55,
+  // which makes sense because it has one free bit available to specify the base
+  // address of the range (selecting lower/higher half).
   w_pmpaddr0(0x1fffffffffffffull);
   w_pmpcfg0(0x1f);
 
